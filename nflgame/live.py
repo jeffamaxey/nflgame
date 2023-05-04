@@ -280,11 +280,11 @@ def _run_active(callback, games):
     # whatever is in _last.
     diffs = []
     for game in active + completed:
-        for last_game in _last or []:
-            if game.eid != last_game.eid:
-                continue
-            diffs.append(game - last_game)
-
+        diffs.extend(
+            game - last_game
+            for last_game in _last or []
+            if game.eid == last_game.eid
+        )
     _last = active
     callback(active, completed, diffs)
     return True
@@ -309,12 +309,7 @@ def _active_games(inactive_interval):
     _MAX_GAME_TIME seconds in the past.
     """
     games = _games_in_week(_cur_year, _cur_week, _cur_season_phase)
-    active = []
-    for info in games:
-        if not _game_is_active(info, inactive_interval):
-            continue
-        active.append(info)
-    return active
+    return [info for info in games if _game_is_active(info, inactive_interval)]
 
 
 def _games_in_week(year, week, kind='REG'):
@@ -363,7 +358,7 @@ def _update_week_number():
     phase = gms.getAttribute('t').strip()
     if phase == 'P':
         _cur_season_phase = 'PRE'
-    elif phase == 'POST' or phase == 'PRO':
+    elif phase in ['POST', 'PRO']:
         _cur_season_phase = 'POST'
         _cur_week -= 17
     else:

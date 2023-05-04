@@ -86,7 +86,7 @@ def initial_mappings(conf):
         for gsis_id, meta in metas.items():
             reverse[meta['profile_id']] = gsis_id
     except IOError as e:
-        eprint('Could not open "%s": %s' % (conf.json_update_file, e))
+        eprint(f'Could not open "{conf.json_update_file}": {e}')
     # Delete some keys in every entry. We do this to stay fresh.
     # e.g., any player with "team" set should be actively on a roster.
     for k in metas:
@@ -100,7 +100,7 @@ def profile_id_from_url(url):
     if url is None:
         return None
     m = re.search('/([0-9]+)/', url)
-    return None if m is None else int(m.group(1))
+    return None if m is None else int(m[1])
 
 
 def profile_url(gsis_id):
@@ -109,7 +109,7 @@ def profile_url(gsis_id):
         return None
     loc = resp['location']
     if not loc.startswith('http://'):
-        loc = 'http://www.nfl.com' + loc
+        loc = f'http://www.nfl.com{loc}'
     return loc
 
 
@@ -120,17 +120,13 @@ def gsis_id(profile_url):
     m = re.search('GSIS\s+ID:\s+([0-9-]+)', content)
     if m is None:
         return None
-    gid = m.group(1).strip()
-    if len(gid) != 10:  # Can't be valid...
-        return None
-    return gid
+    gid = m[1].strip()
+    return None if len(gid) != 10 else gid
 
 
 def roster_soup(team):
     resp, content = new_http().request(urls['roster'] % team, 'GET')
-    if resp['status'] != '200':
-        return None
-    return BeautifulSoup(content, PARSER)
+    return None if resp['status'] != '200' else BeautifulSoup(content, PARSER)
 
 
 def try_int(s):
@@ -142,16 +138,12 @@ def try_int(s):
 
 def first_int(s):
     m = re.search('[0-9]+', s)
-    if m is None:
-        return 0
-    return int(m.group(0))
+    return 0 if m is None else int(m[0])
 
 
 def first_word(s):
     m = re.match('\S+', s)
-    if m is None:
-        return ''
-    return m.group(0)
+    return '' if m is None else m[0]
 
 
 def height_as_inches(txt):
@@ -170,7 +162,7 @@ def meta_from_soup_row(team, soup_row):
     for td in soup_row.find_all('td'):
         tds.append(td)
         data.append(td.get_text().strip())
-    profile_url = 'http://www.nfl.com%s' % tds[1].a['href']
+    profile_url = f"http://www.nfl.com{tds[1].a['href']}"
 
     name = tds[1].a.get_text().strip()
     if ',' not in name:
@@ -185,7 +177,7 @@ def meta_from_soup_row(team, soup_row):
         'number': try_int(data[0]),
         'first_name': first_name,
         'last_name': last_name,
-        'full_name': '%s %s' % (first_name, last_name),
+        'full_name': f'{first_name} {last_name}',
         'position': data[2],
         'status': data[3],
         'height': height_as_inches(data[4]),
@@ -212,7 +204,7 @@ def meta_from_profile_html(html):
         if len(name_pieces) == 1:
             first, last = '', name
         else:
-            first, last = ' '.join(name_pieces[0:-1]), name_pieces[-1]
+            first, last = ' '.join(name_pieces[:-1]), name_pieces[-1]
         meta = {
             'first_name': first,
             'last_name': last,
@@ -223,7 +215,7 @@ def meta_from_profile_html(html):
         title = soup.find('title').get_text()
         m = re.search(',\s+([A-Z]+)', title)
         if m is not None:
-            meta['position'] = m.group(1)
+            meta['position'] = m[1]
 
         # Look for a whole bunch of fields in the format "Field: Value".
         search = pinfo.get_text()
@@ -232,18 +224,18 @@ def meta_from_profile_html(html):
         for f, key in fields.items():
             m = re.search('%s:\s+([\S ]+)' % f, search)
             if m is not None:
-                meta[key] = m.group(1)
-                if key == 'height':
+                meta[key] = m[1]
+                if key == 'birthdate':
+                    meta[key] = first_word(meta[key])
+
+                elif key == 'height':
                     meta[key] = height_as_inches(meta[key])
                 elif key == 'weight':
                     meta[key] = first_int(meta[key])
-                elif key == 'birthdate':
-                    meta[key] = first_word(meta[key])
-
         # Experience is a little weirder...
         m = re.search('Experience:\s+([0-9]+)', search)
         if m is not None:
-            meta['years_pro'] = int(m.group(1))
+            meta['years_pro'] = int(m[1])
 
         return meta
     except AttributeError:
@@ -322,7 +314,7 @@ def run():
     # Before doing anything laborious, make sure we have write access to
     # the JSON database.
     if not os.access(args.json_update_file, os.W_OK):
-        eprint('I do not have write access to "%s".' % args.json_update_file)
+        eprint(f'I do not have write access to "{args.json_update_file}".')
         eprint('Without write access, I cannot update the player database.')
         sys.exit(1)
 
@@ -378,19 +370,19 @@ def run():
         players = dict(players_from_games(metas, games))
 
     # Find the profile ID for each new player.
-    if len(players) > 0:
+    if players:
         eprint('Finding (profile id -> gsis id) mapping for players...')
 
         def fetch(t):  # t[0] is the gsis_id and t[1] is the gsis name
             return t[0], t[1], profile_url(t[0])
+
         for i, t in enumerate(pool.imap(fetch, players.items()), 1):
             gid, name, purl = t
             pid = profile_id_from_url(purl)
 
             progress(i, len(players))
             if purl is None or pid is None:
-                errors.append('Could not get profile URL for (%s, %s)'
-                              % (gid, name))
+                errors.append(f'Could not get profile URL for ({gid}, {name})')
                 continue
 
             assert gid not in metas
@@ -405,11 +397,12 @@ def run():
 
     def fetch(team):
         return team, roster_soup(team)
+
     for i, (team, soup) in enumerate(pool.imap(fetch, teams), 1):
         progress(i, len(teams))
 
         if soup is None:
-            errors.append('Could not get roster for team %s' % team)
+            errors.append(f'Could not get roster for team {team}')
             continue
 
         tbodys = soup.find(id='result').find_all('tbody')
@@ -428,16 +421,17 @@ def run():
     # recorded a statistic yet. (i.e., Not in nflgame play data.)
     purls = [r['profile_url']
              for r in roster if r['profile_id'] not in reverse]
-    if len(purls) > 0:
+    if purls:
         eprint('Fetching GSIS identifiers for players not in nflgame...')
 
         def fetch(purl):
             return purl, gsis_id(purl)
+
         for i, (purl, gid) in enumerate(pool.imap(fetch, purls), 1):
             progress(i, len(purls))
 
             if gid is None:
-                errors.append('Could not get GSIS id at %s' % purl)
+                errors.append(f'Could not get GSIS id at {purl}')
                 continue
             reverse[profile_id_from_url(purl)] = gid
         progress_done()
@@ -447,7 +441,7 @@ def run():
     for data in roster:
         gsisid = reverse.get(data['profile_id'], None)
         if gsisid is None:
-            errors.append('Could not find gsis_id for %s' % data)
+            errors.append(f'Could not find gsis_id for {data}')
             continue
         merged = dict(metas.get(gsisid, {}), **data)
         merged['gsis_id'] = gsisid
@@ -465,18 +459,16 @@ def run():
             gid, purl = t
             resp, content = new_http().request(purl, 'GET')
             if resp['status'] != '200':
-                if resp['status'] == '404':
-                    return gid, purl, False
-                else:
-                    return gid, purl, None
+                return (gid, purl, False) if resp['status'] == '404' else (gid, purl, None)
             return gid, purl, content
+
         for i, (gid, purl, html) in enumerate(pool.imap(fetch, gids), 1):
             progress(i, len(gids))
             more_meta = meta_from_profile_html(html)
             if not more_meta:
                 # If more_meta is False, then it was a 404. Not our problem.
                 if more_meta is None:
-                    errors.append('Could not fetch HTML for %s' % purl)
+                    errors.append(f'Could not fetch HTML for {purl}')
                 continue
             metas[gid] = dict(metas[gid], **more_meta)
         progress_done()
@@ -486,7 +478,7 @@ def run():
         json.dump(metas, fp, indent=4, sort_keys=True,
                   separators=(',', ': '))
 
-    if len(errors) > 0:
+    if errors:
         eprint('\n')
         eprint('There were some errors during the download. Usually this is a')
         eprint('result of an HTTP request timing out, which means the')

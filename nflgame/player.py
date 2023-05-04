@@ -22,10 +22,7 @@ def _create_players(jsonf=None):
     except IOError:
         return {}
 
-    players = {}
-    for playerid in data:
-        players[playerid] = Player(data[playerid])
-    return players
+    return {playerid: Player(data[playerid]) for playerid in data}
 
 
 class Player (object):
@@ -63,10 +60,11 @@ class Player (object):
     def stats(self, year, week=None):
         games = nflgame.games(year, week)
         players = list(nflgame.combine(games).filter(playerid=self.playerid))
-        if len(players) == 0:
-            return GamePlayerStats(self.player_id, self.gsis_name,
-                                   None, self.team)
-        return players[0]
+        return (
+            players[0]
+            if players
+            else GamePlayerStats(self.player_id, self.gsis_name, None, self.team)
+        )
 
     def plays(self, year, week=None):
         plays = []
@@ -77,7 +75,7 @@ class Player (object):
         return nflgame.seq.GenPlays(plays)
 
     def __str__(self):
-        return '%s (%s, %s)' % (self.name, self.position, self.team)
+        return f'{self.name} ({self.position}, {self.team})'
 
 
 class PlayerDefense (Player):
@@ -94,7 +92,7 @@ class PlayerDefense (Player):
         assert False, 'Cannot be called on a defense.'
 
     def __str__(self):
-        return '%s Defense' % self.team
+        return f'{self.team} Defense'
 
 
 class PlayerStats (object):
@@ -134,10 +132,7 @@ class PlayerStats (object):
             self.player = nflgame.players[self.playerid]
 
     def has_cat(self, cat):
-        for f in self._stats:
-            if f.startswith(cat):
-                return True
-        return False
+        return any(f.startswith(cat) for f in self._stats)
 
     @property
     def guess_position(self):
@@ -176,11 +171,7 @@ class PlayerStats (object):
         Returns the total number of touchdowns credited to this player across
         all statistical categories.
         """
-        n = 0
-        for f, v in self.__dict__.iteritems():
-            if f.endswith('tds'):
-                n += v
-        return n
+        return sum(v for f, v in self.__dict__.iteritems() if f.endswith('tds'))
 
     @property
     def twopta(self):
@@ -223,9 +214,7 @@ class PlayerStats (object):
         """
         Returns a roughly-formatted string of all statistics for this player.
         """
-        s = []
-        for stat, val in self._stats.iteritems():
-            s.append('%s: %s' % (stat, val))
+        s = [f'{stat}: {val}' for stat, val in self._stats.iteritems()]
         return ', '.join(s)
 
     def _add_stats(self, stats):
@@ -261,10 +250,7 @@ class PlayerStats (object):
         assert self.playerid == other.playerid
         assert type(self) == type(other)
 
-        if self.home != other.home:
-            home = None
-        else:
-            home = self.home
+        home = None if self.home != other.home else self.home
         new_player = self.__class__(self.playerid, self.name, home, self.team)
         new_player._add_stats(self._stats)
         new_player._add_stats(other._stats)
@@ -288,14 +274,8 @@ class PlayerStats (object):
             else:
                 new_player.__dict__[bk] = new_player._stats[bk]
 
-        anydiffs = False
-        for k, v in new_player._stats.iteritems():
-            if v > 0:
-                anydiffs = True
-                break
-        if not anydiffs:
-            return None
-        return new_player
+        anydiffs = any(v > 0 for k, v in new_player._stats.iteritems())
+        return new_player if anydiffs else None
 
     def __getattr__(self, name):
         # If name has one of the categories as a prefix, then return
@@ -312,22 +292,19 @@ class PlayerStats (object):
         yards, touchdowns, and interceptions. Passer rating in the NFL is on a
         scale from 0 to 158.3.
         """
-        l = [((self.passing_cmp / self.passing_att) - .3) * 5]
-        l.append(((self.passing_yds / self.passing_att) - 3) * .25)
-        l.append((self.tds / self.passing_att) * 20)
-        l.append(2.375 - (self.passing_ints / self.passing_att * 25))
-
+        l = [
+            ((self.passing_cmp / self.passing_att) - 0.3) * 5,
+            ((self.passing_yds / self.passing_att) - 3) * 0.25,
+            self.tds / self.passing_att * 20,
+            2.375 - self.passing_ints / self.passing_att * 25,
+        ]
         m = []
         for a in l:
             if a < 0:
                 a = 0
-                m.append(a)
             elif a > 2.375:
                 a = 2.375
-                m.append(a)
-            else:
-                m.append(a)
-
+            m.append(a)
             rating = round((sum(m) / 6) * 100, 1)
         return rating
 

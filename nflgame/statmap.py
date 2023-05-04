@@ -52,12 +52,8 @@ def values(category_id, yards):
     info = idmap[category_id]
     try:
         yards = int(yards)
-    except ValueError:
+    except (ValueError, TypeError):
         yards = 0
-    except TypeError:
-        # Catch errors if yards is a NoneType
-        yards = 0
-
     vals = {}
     if info['yds']:
         vals[info['yds']] = yards

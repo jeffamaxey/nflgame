@@ -80,14 +80,16 @@ There are several active contributors to nflgame that watch the issue tracker.
 We tend to respond fairly quickly!
 """
 
+
 import itertools
 
 import sys
 
 if sys.version_info[:2] != (2, 7):
     print("nflgame requires Python 2.7 and does not yet work with Python 3")
-    print("You are running Python version {}.{}".format(
-        sys.version_info.major, sys.version_info.minor))
+    print(
+        f"You are running Python version {sys.version_info.major}.{sys.version_info.minor}"
+    )
     sys.exit(1)
 
 import nflgame.game  # noqa
@@ -162,12 +164,12 @@ def find(name, team=None):
 
     If team is not None, it is used as an additional search constraint.
     """
-    hits = []
-    for player in players.itervalues():
-        if player.name.lower() == name.lower():
-            if team is None or team.lower() == player.team.lower():
-                hits.append(player)
-    return hits
+    return [
+        player
+        for player in players.itervalues()
+        if player.name.lower() == name.lower()
+        and (team is None or team.lower() == player.team.lower())
+    ]
 
 
 def standard_team(team):
@@ -335,10 +337,7 @@ def combine(games, plays=False):
     statistics like receiver targets, yards after the catch, punt and field
     goal blocks, etc.
     """
-    if plays:
-        return combine_play_stats(games)
-    else:
-        return combine_game_stats(games)
+    return combine_play_stats(games) if plays else combine_game_stats(games)
 
 
 def combine_game_stats(games):

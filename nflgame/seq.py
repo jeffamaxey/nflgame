@@ -92,8 +92,7 @@ class Gen (object):
                 return getattr(item, field) == value
             preds.append(functools.partial(pred, k, v))
 
-        gen = itertools.ifilter(lambda item: all([f(item) for f in preds]),
-                                self)
+        gen = itertools.ifilter(lambda item: all(f(item) for f in preds), self)
         return self.__class__(gen)
 
     def limit(self, n):
@@ -118,7 +117,7 @@ class Gen (object):
 
     def __str__(self):
         """Returns a list of items in the sequence."""
-        return '[%s]' % ', '.join([str(item) for item in self])
+        return f"[{', '.join([str(item) for item in self])}]"
 
     def __iter__(self):
         """Make this an iterable sequence."""
@@ -164,14 +163,13 @@ class GenDrives (Gen):
         n -= 1
         if team is None:
             return list(self)[n]
-        else:
-            i = 0
-            for d in self:
-                if d.team == team:
-                    if i == n:
-                        return d
-                    i += 1
-            assert False, \
+        i = 0
+        for d in self:
+            if d.team == team:
+                if i == n:
+                    return d
+                i += 1
+        assert False, \
                 'Could not find drive %d for team %s.' % (n + 1, team)
 
 
@@ -207,10 +205,7 @@ class GenPlayerStats (Gen):
         Note that NFL GameCenter formats their names like "T.Brady" and
         "W.Welker". Thus, `name` should also be in this format.
         """
-        for p in self:
-            if p.name == name:
-                return p
-        return None
+        return next((p for p in self if p.name == name), None)
 
     def playerid(self, playerid):
         """
@@ -221,10 +216,7 @@ class GenPlayerStats (Gen):
         If no such player with the given identifier is found, None is
         returned.
         """
-        for p in self:
-            if p.playerid == playerid:
-                return p
-        return None
+        return next((p for p in self if p.playerid == playerid), None)
 
     def touchdowns(self):
         """
@@ -322,14 +314,11 @@ class GenPlayerStats (Gen):
                 d['pos'] = p.player.position
 
             for field in fields:
-                if field in p.__dict__:
-                    d[field] = p.__dict__[field]
-                else:
-                    d[field] = ""
+                d[field] = p.__dict__[field] if field in p.__dict__ else ""
             rows.append(d)
 
         fieldNames = ["name", "id", "home", "team", "pos"] + fields
-        rows = [dict((f, f) for f in fieldNames)] + rows
+        rows = [{f: f for f in fieldNames}] + rows
         csv.DictWriter(open(fileName, 'wb+'), fieldNames).writerows(rows)
 
     def __add__(self, other):

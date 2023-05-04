@@ -132,9 +132,7 @@ def update_week(sched, year, stype, week):
 
 
 def write_schedule(fpath, sched):
-    alist = []
-    for gsis_id in sorted(sched):
-        alist.append([gsis_id, sched[gsis_id]])
+    alist = [[gsis_id, sched[gsis_id]] for gsis_id in sorted(sched)]
     json.dump({'time': time.time(), 'games': alist},
               open(fpath, 'w+'), indent=1, sort_keys=True,
               separators=(',', ': '))
@@ -172,7 +170,7 @@ def run():
     # Before doing anything laborious, make sure we have write access to
     # the JSON database.
     if not os.access(args.json_update_file, os.W_OK):
-        eprint('I do not have write access to "%s".' % args.json_update_file)
+        eprint(f'I do not have write access to "{args.json_update_file}".')
         eprint('Without write access, I cannot update the schedule.')
         sys.exit(1)
 
@@ -180,7 +178,7 @@ def run():
         sched = new_schedule()
     else:
         sched, last = nflgame.sched._create_schedule(args.json_update_file)
-        print('Last updated: %s' % last)
+        print(f'Last updated: {last}')
 
         if (args.year, args.phase, args.week) == (None, None, None):
             year, week = nflgame.live.current_year_and_week()

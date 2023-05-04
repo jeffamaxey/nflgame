@@ -179,11 +179,7 @@ def email(to_email, msg, from_email=None):
     elif _email_from is not None:
         from_email_ = _email_from
 
-    headers = [
-        'To: %s' % to_email,
-        'From: %s' % from_email_,
-        'Subject: nflgame alert',
-    ]
+    headers = [f'To: {to_email}', f'From: {from_email_}', 'Subject: nflgame alert']
     full_msg = '%s\r\n\r\n%s' % ('\r\n'.join(headers), msg)
     _send_email(from_email_, to_email, full_msg)
 
@@ -230,7 +226,7 @@ def sms(phone_number, msg, provider=None):
     if provider is None:
         _google_voice_sms(phone_number, msg)
     else:
-        to = '%s@%s' % (phone_number, providers.get(provider, provider))
+        to = f'{phone_number}@{providers.get(provider, provider)}'
         _send_email('', to, 'To: %s\r\n\r\n%s' % (to, msg))
 
 

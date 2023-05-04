@@ -49,9 +49,7 @@ class FieldPosition (object):
     play.
     """
     def __new__(cls, pos_team=None, yardline=None, offset=None):
-        if not yardline and offset is None:
-            return None
-        return object.__new__(cls)
+        return None if not yardline and offset is None else object.__new__(cls)
 
     def __init__(self, pos_team=None, yardline=None, offset=None):
         """
@@ -69,10 +67,7 @@ class FieldPosition (object):
 
         territory, yd_str = yardline.split()
         yd = int(yd_str)
-        if territory == pos_team:
-            self.offset = -(50 - yd)
-        else:
-            self.offset = 50 - yd
+        self.offset = -(50 - yd) if territory == pos_team else 50 - yd
 
     def __cmp__(self, other):
         if isinstance(other, int):
@@ -151,9 +146,7 @@ class GameClock (object):
 
         try:
             self._minutes, self._seconds = map(int, self.clock.split(':'))
-        except ValueError:
-            self._minutes, self._seconds = 0, 0
-        except AttributeError:
+        except (ValueError, AttributeError):
             self._minutes, self._seconds = 0, 0
         try:
             self.__qtr = int(self.qtr)
@@ -285,23 +278,22 @@ class Game (object):
 
         if not self.game_over():
             self.winner = None
+        elif self.score_home > self.score_away:
+            self.winner = self.home
+            self.loser = self.away
+        elif self.score_away > self.score_home:
+            self.winner = self.away
+            self.loser = self.home
         else:
-            if self.score_home > self.score_away:
-                self.winner = self.home
-                self.loser = self.away
-            elif self.score_away > self.score_home:
-                self.winner = self.away
-                self.loser = self.home
-            else:
-                self.winner = '%s/%s' % (self.home, self.away)
-                self.loser = '%s/%s' % (self.home, self.away)
+            self.winner = f'{self.home}/{self.away}'
+            self.loser = f'{self.home}/{self.away}'
 
         # Load the scoring summary into a simple list of strings.
         self.scores = []
         for k in sorted(map(int, self.data['scrsummary'])):
             play = self.data['scrsummary'][str(k)]
             s = '%s - Q%d - %s - %s' \
-                % (play['team'], play['qtr'], play['type'], play['desc'])
+                    % (play['team'], play['qtr'], play['type'], play['desc'])
             self.scores.append(s)
 
         # Check to see if the game is over, and if so, cache the data.
@@ -314,7 +306,7 @@ class Game (object):
 
     def season(self):
         """Returns the year of the season this game belongs to."""
-        year = int(self.eid[0:4])
+        year = int(self.eid[:4])
         month = int(self.eid[4:6])
         if month <= 3:
             year -= 1
@@ -377,10 +369,7 @@ class Game (object):
             newp = nflgame.player.GamePlayerStats(pplay.playerid,
                                                   pplay.name, pplay.home,
                                                   pplay.team)
-            maxstats = {}
-            for stat, val in pplay._stats.iteritems():
-                maxstats[stat] = val
-
+            maxstats = dict(pplay._stats.iteritems())
             newp._overwrite_stats(maxstats)
             max_players[pplay.playerid] = newp
 
@@ -389,11 +378,10 @@ class Game (object):
                 if pgame.playerid != newp.playerid:
                     continue
 
-                maxstats = {}
-                for stat, val in pgame._stats.iteritems():
-                    maxstats[stat] = max([val,
-                                          newp._stats.get(stat, -_MAX_INT)])
-
+                maxstats = {
+                    stat: max([val, newp._stats.get(stat, -_MAX_INT)])
+                    for stat, val in pgame._stats.iteritems()
+                }
                 newp._overwrite_stats(maxstats)
                 break
         return nflgame.seq.GenPlayerStats(max_players)
@@ -428,13 +416,9 @@ def diff(before, after):
     """
     assert after.eid == before.eid
 
-    plays = []
     after_plays = list(after.drives.plays())
     before_plays = list(before.drives.plays())
-    for play in after_plays:
-        if play not in before_plays:
-            plays.append(play)
-
+    plays = [play for play in after_plays if play not in before_plays]
     # You might think that updated play data is enough. You could scan
     # it for statistics you're looking for (like touchdowns).
     # But sometimes a play can sneak in twice if its description gets
@@ -492,8 +476,7 @@ class Drive (object):
             self.field_end = None
             playids = sorted(map(int, data['plays'].keys()), reverse=True)
             for pid in playids:
-                yrdln = data['plays'][str(pid)]['yrdln'].strip()
-                if yrdln:
+                if yrdln := data['plays'][str(pid)]['yrdln'].strip():
                     self.field_end = FieldPosition(self.team, yrdln)
                     break
             if self.field_end is None:
@@ -514,7 +497,7 @@ class Drive (object):
         # This technique will blow up if a drive lasts more than fifteen
         # minutes and the quarter numbering is messed up.
         if self.time_end <= self.time_start \
-                and self.time_end.quarter in (1, 3):
+                    and self.time_end.quarter in (1, 3):
             self.time_end.quarter += 1
 
         self.__plays = _json_plays(self, data['plays'])
@@ -528,9 +511,9 @@ class Drive (object):
         automatically get None values: result, field_start, field_end,
         time_start and time_end.
         """
-        assert self.team == other.team, \
-            'Cannot add drives from different teams "%s" and "%s".' \
-            % (self.team, other.team)
+        assert (
+            self.team == other.team
+        ), f'Cannot add drives from different teams "{self.team}" and "{other.team}".'
         new_drive = Drive(None, 0, '', None)
         new_drive.team = self.team
         new_drive.home = self.home
@@ -548,8 +531,7 @@ class Drive (object):
         return new_drive
 
     def __str__(self):
-        return '%s (Start: %s, End: %s) %s' \
-               % (self.team, self.time_start, self.time_end, self.result)
+        return f'{self.team} (Start: {self.time_start}, End: {self.time_end}) {self.result}'
 
 
 class Play (object):
@@ -695,7 +677,7 @@ def _json_plays(drive, data):
             continue
         seen_ids.add(playid)
         seen_desc.add(desc)
-        plays.append(Play(drive, playid, data[playid]))
+        plays.append(Play(drive, playid, p))
     return plays
 
 
@@ -716,10 +698,7 @@ def _json_play_players(play, data):
                 continue
             if playerid not in players:
                 home = play.drive.game.is_home(info['clubcode'])
-                if home:
-                    team_name = play.drive.game.home
-                else:
-                    team_name = play.drive.game.away
+                team_name = play.drive.game.home if home else play.drive.game.away
                 stats = nflgame.player.PlayPlayerStats(playerid,
                                                        info['playerName'],
                                                        home, team_name)
@@ -733,7 +712,7 @@ def _json_play_events(data):
     """
     Takes a single JSON play entry (data) and converts it to a list of events.
     """
-    temp = list()
+    temp = []
     for playerid, statcats in data.iteritems():
         for info in statcats:
             if info['statId'] not in nflgame.statmap.idmap:
@@ -758,17 +737,10 @@ def _json_game_player_stats(game, data):
             if category not in data[team]['stats']:
                 continue
             for pid, raw in data[team]['stats'][category].iteritems():
-                stats = {}
-                for k, v in raw.iteritems():
-                    if k == 'name':
-                        continue
-                    stats['%s_%s' % (category, k)] = v
+                stats = {f'{category}_{k}': v for k, v in raw.iteritems() if k != 'name'}
                 if pid not in players:
                     home = team == 'home'
-                    if home:
-                        team_name = game.home
-                    else:
-                        team_name = game.away
+                    team_name = game.home if home else game.away
                     players[pid] = nflgame.player.GamePlayerStats(pid,
                                                                   raw['name'],
                                                                   home,
